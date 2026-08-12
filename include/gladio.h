@@ -7,11 +7,11 @@
 #define DEBUG_MODE (0) // FIXME 0=DISABLE or (FIRST | SECOND)
 #define IS_DEBUG_ENABLED(type) ((DEBUG_MODE & type) != 0)
 
-#define GLX_EXT_MAJOR_OPCODE -106
 #define SERVER_RING_BUFFER_SIZE 67108864
 #define CLIENT_RING_BUFFER_SIZE 33554432
 #define THREAD_POOL_NUM_THREADS 4
 #define PIXEL_READ_CACHE_SKIP_FRAMES 3
+extern char glxMajorOpcode;
 #define SKIP_GL_FINISH 1
 #define X11_SERVER_PATH "/data/data/com.winlator/files/rootfs/tmp/.X11-unix/X0"
 
@@ -27,7 +27,7 @@
 
 #define MAX_LIGHTS 4
 #define MAX_TEXTURES 8
-#define MAX_TEXTURE_TARGETS 4
+#define MAX_TEXTURE_TARGETS 7
 #define MAX_FRAMEBUFFER_TARGETS 3
 #define MAX_BUFFER_TARGETS 6
 #define MAX_ARB_PROGRAM_TARGETS 2
@@ -148,7 +148,7 @@ static inline bool gl_recv(RingBuffer* ring, short* outRequestCode, ArrayBuffer*
 
 static inline bool glx_send(int fd, char opcode, void* data, int size) {
     char header[4];
-    header[0] = GLX_EXT_MAJOR_OPCODE;
+    header[0] = glxMajorOpcode;
     header[1] = opcode;
     *(short*)(header + 2) = size / 4 + 1;
 
@@ -286,6 +286,12 @@ static inline uint8_t indexOfGLTarget(GLenum target) {
         case GL_TEXTURE_2D_ARRAY:
         case GL_TEXTURE_1D_ARRAY:
             return 3;
+        case GL_TEXTURE_2D_MULTISAMPLE:
+            return 4;
+        case GL_TEXTURE_CUBE_MAP_ARRAY:
+            return 5;
+        case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
+            return 6;
         case GL_UNIFORM_BUFFER:
             return 4;
         case GL_TEXTURE_BUFFER:

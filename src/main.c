@@ -9,6 +9,7 @@
 int serverFd = -1;
 ArrayBuffer outputBuffer = {0};
 ArrayBuffer inputBuffer = {0};
+char glxMajorOpcode = 0;
 SparseArray glxContexts = {0};
 thread_local GLContext* currentGLContext = NULL;
 
@@ -160,7 +161,9 @@ static int gladioServerConnect() {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sun_family = AF_LOCAL;
 
-    strncpy(server_addr.sun_path, X11_SERVER_PATH, sizeof(server_addr.sun_path) - 1);
+    const char* socketPath = getenv("GLADIO_X11_SOCKET");
+    if (!socketPath || !socketPath[0]) socketPath = X11_SERVER_PATH;
+    strncpy(server_addr.sun_path, socketPath, sizeof(server_addr.sun_path) - 1);
 
     int res;
     do {
@@ -197,7 +200,15 @@ static bool sendX11AuthRequest() {
     return true;
 }
 
-bool gladioInitOnce() {
+bool gladioInitOnce(Display* dpy) {
+    if (glxMajorOpcode == 0) {
+        int majorOpcode;
+        int firstEvent;
+        int firstError;
+        if (!XQueryExtension(dpy, "GLX", &majorOpcode, &firstEvent,
+                             &firstError)) return false;
+        glxMajorOpcode = (char)majorOpcode;
+    }
     if (serverFd == -1) {
         serverFd = gladioServerConnect();
         

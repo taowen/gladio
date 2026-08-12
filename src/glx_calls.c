@@ -1,5 +1,7 @@
+#define _GNU_SOURCE
 #include "gladio.h"
 #include "gl_context.h"
+#include <dlfcn.h>
 
 #define MSG_DEBUG_UNIMPLEMENTED_GLXCALL "gladio: unimplemented call %s"
 #define DEFAULT_FBCONFIG_ID 1
@@ -30,7 +32,7 @@ void glXCopyContext(Display* dpy, GLXContext src, GLXContext dst, unsigned long 
 }
 
 GLXContext glXCreateContextAttribsARB(Display* dpy, GLXFBConfig config, GLXContext share_context, Bool direct, const int* attrib_list) {
-    if (!gladioInitOnce()) return NULL;
+    if (!gladioInitOnce(dpy)) return NULL;
     GLX_CALL_LOCK();
     int contextId = maxContextId++;
     
@@ -74,7 +76,7 @@ GLXContext glXCreateContextAttribsARB(Display* dpy, GLXFBConfig config, GLXConte
 }
 
 GLXContext glXCreateContext(Display* dpy, XVisualInfo* vis, GLXContext shareList, Bool direct) {
-    if (!gladioInitOnce()) return NULL;
+    if (!gladioInitOnce(dpy)) return NULL;
     GLX_CALL_LOCK();
     int contextId = maxContextId++;
 
@@ -111,8 +113,20 @@ GLXContext glXCreateNewContext(Display* dpy, GLXFBConfig config, int render_type
 }
 
 GLXPbuffer glXCreatePbuffer(Display* dpy, GLXFBConfig config, const int* attrib_list) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLXCALL, "glXCreatePbuffer");
-    return 0;
+    unsigned int width = 1;
+    unsigned int height = 1;
+    if (attrib_list) {
+        for (int i = 0; attrib_list[i] != None; i += 2) {
+            if (attrib_list[i] == GLX_PBUFFER_WIDTH)
+                width = attrib_list[i + 1];
+            else if (attrib_list[i] == GLX_PBUFFER_HEIGHT)
+                height = attrib_list[i + 1];
+        }
+    }
+    if (width == 0 || height == 0) return 0;
+    return (GLXPbuffer)XCreateSimpleWindow(
+            dpy, RootWindow(dpy, DefaultScreen(dpy)), 0, 0,
+            width, height, 0, 0, 0);
 }
 
 GLXPixmap glXCreatePixmap(Display* dpy, GLXFBConfig config, Pixmap pixmap, const int* attrib_list) {
@@ -139,7 +153,7 @@ void glXDestroyGLXPixmap(Display* dpy, GLXPixmap pixmap) {
 }
 
 void glXDestroyPbuffer(Display* dpy, GLXPbuffer pbuf) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLXCALL, "glXDestroyPbuffer");
+    if (pbuf) XDestroyWindow(dpy, (Window)pbuf);
 }
 
 void glXDestroyPixmap(Display* dpy, GLXPixmap pixmap) {
@@ -160,8 +174,58 @@ const char* glXGetClientString(Display* dpy, int name) {
 }
 
 int glXGetConfig(Display* dpy, XVisualInfo* visual, int attrib, int* value) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLXCALL, "glXGetConfig");
-    return 0;
+    if (!visual || !value) return GLX_BAD_ATTRIBUTE;
+    switch (attrib) {
+        case GLX_USE_GL:
+        case GLX_RGBA:
+        case GLX_DOUBLEBUFFER:
+        case GLX_X_RENDERABLE:
+            *value = True;
+            break;
+        case GLX_BUFFER_SIZE:
+            *value = 32;
+            break;
+        case GLX_RED_SIZE:
+        case GLX_GREEN_SIZE:
+        case GLX_BLUE_SIZE:
+        case GLX_ALPHA_SIZE:
+            *value = 8;
+            break;
+        case GLX_DEPTH_SIZE:
+            *value = 24;
+            break;
+        case GLX_STENCIL_SIZE:
+            *value = 8;
+            break;
+        case GLX_X_VISUAL_TYPE:
+            *value = GLX_TRUE_COLOR;
+            break;
+        case GLX_CONFIG_CAVEAT:
+        case GLX_TRANSPARENT_TYPE:
+            *value = GLX_NONE;
+            break;
+        case GLX_DRAWABLE_TYPE:
+            *value = GLX_WINDOW_BIT;
+            break;
+        case GLX_RENDER_TYPE:
+            *value = GLX_RGBA_BIT;
+            break;
+        case GLX_FBCONFIG_ID:
+            *value = DEFAULT_FBCONFIG_ID;
+            break;
+        case GLX_LEVEL:
+        case GLX_STEREO:
+        case GLX_AUX_BUFFERS:
+        case GLX_ACCUM_RED_SIZE:
+        case GLX_ACCUM_GREEN_SIZE:
+        case GLX_ACCUM_BLUE_SIZE:
+        case GLX_ACCUM_ALPHA_SIZE:
+            *value = 0;
+            break;
+        default:
+            return GLX_BAD_ATTRIBUTE;
+    }
+    return Success;
 }
 
 GLXContext glXGetCurrentContext() {
@@ -193,6 +257,7 @@ int glXGetFBConfigAttrib(Display* dpy, GLXFBConfig config, int attribute, int* v
 }
 
 GLXFBConfig* glXGetFBConfigs(Display* dpy, int screen, int* nelements) {
+    if (!gladioInitOnce(dpy)) return NULL;
     static struct __GLXFBConfigRec* globalFBConfigs = NULL;
     GLX_CALL_LOCK();
    
@@ -269,6 +334,19 @@ __GLXextFuncPtr glXGetProcAddressARB(const GLubyte* procName) {
     else if (strcmp(name, "glXUseXFont") == 0) return (__GLXextFuncPtr)glXUseXFont;
     else if (strcmp(name, "glXWaitGL") == 0) return (__GLXextFuncPtr)glXWaitGL;
     else if (strcmp(name, "glXWaitX") == 0) return (__GLXextFuncPtr)glXWaitX;
+    /* GLX loaders also use this API for ordinary OpenGL entry points. All
+     * Gladio gl* calls are exported by this DSO. Chrome loads libGL locally,
+     * so RTLD_DEFAULT alone cannot reliably see those exports. */
+    if (strncmp(name, "gl", 2) == 0) {
+        static void* selfHandle = NULL;
+        if (!selfHandle) {
+            Dl_info info;
+            if (dladdr((void*)glXGetProcAddressARB, &info) && info.dli_fname)
+                selfHandle = dlopen(info.dli_fname, RTLD_LAZY | RTLD_NOLOAD);
+        }
+        return (__GLXextFuncPtr)dlsym(
+                selfHandle ? selfHandle : RTLD_DEFAULT, name);
+    }
     return NULL;
 }
 
@@ -331,15 +409,32 @@ int glXQueryContext(Display* dpy, GLXContext ctx, int attribute, int* value) {
 }
 
 void glXQueryDrawable(Display* dpy, GLXDrawable draw, int attribute, unsigned int* value) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLXCALL, "glXQueryDrawable");
+    if (!value) return;
+    Window root;
+    int x, y;
+    unsigned int width, height, border, depth;
+    if (!XGetGeometry(dpy, (Drawable)draw, &root, &x, &y, &width,
+                      &height, &border, &depth)) {
+        *value = 0;
+    }
+    else if (attribute == GLX_WIDTH) {
+        *value = width;
+    }
+    else if (attribute == GLX_HEIGHT) {
+        *value = height;
+    }
+    else {
+        *value = 0;
+    }
 }
 
 Bool glXQueryExtension(Display* dpy, int* errorb, int* event) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLXCALL, "glXQueryExtension");
-    return 0;
+    int majorOpcode;
+    return XQueryExtension(dpy, "GLX", &majorOpcode, event, errorb);
 }
 
 const char* glXQueryExtensionsString(Display* dpy, int screen) {
+    if (!gladioInitOnce(dpy)) return NULL;
     GLX_CALL_LOCK();
     char* cachedString = getCachedString(GLX_EXTENSIONS);
     if (cachedString) {
@@ -369,6 +464,7 @@ const char* glXQueryExtensionsString(Display* dpy, int screen) {
 }
 
 const char* glXQueryServerString(Display* dpy, int screen, int name) {
+    if (!gladioInitOnce(dpy)) return NULL;
     GLX_CALL_LOCK();
     char* cachedString = getCachedString(name);
     if (cachedString) {
@@ -402,6 +498,7 @@ const char* glXQueryServerString(Display* dpy, int screen, int name) {
 }
 
 Bool glXQueryVersion(Display* dpy, int* maj, int* min) {
+    if (!gladioInitOnce(dpy)) return false;
     GLX_CALL_LOCK();
     ArrayBuffer requestData = {0};
     ArrayBuffer_putInt(&requestData, *maj);

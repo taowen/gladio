@@ -34,12 +34,12 @@ typedef struct AttributePair {
 } AttributePair;
 
 typedef struct __GLXFBConfigRec {
-    AttributePair attributes[16];
+    AttributePair attributes[32];
     int numProperties;
 } __GLXFBConfigRec;
 
 extern bool setupRingBuffers(GLContext* context);
-extern bool gladioInitOnce();
+extern bool gladioInitOnce(Display* dpy);
 extern char* getCachedString(int name);
 extern char* putCachedString(int name, char* string, int length);
 extern void writeUnboundVertexArrays(GLint first, GLsizei count, const void* indices, GLenum indexType, GLint basevertex);

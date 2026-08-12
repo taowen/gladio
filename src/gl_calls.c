@@ -2505,7 +2505,11 @@ void glGetInteger64i_v(GLenum target, GLuint index, GLint64* data) {
 }
 
 void glGetInteger64v(GLenum pname, GLint64* data) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLCALL, "glGetInteger64v");
+    GL_CALL_LOCK();
+    GL_SEND_CHECKED(REQUEST_CODE_GL_GET_INTEGER64V, &pname, sizeof(GLenum));
+    GL_RECV_CHECKED();
+    *data = ArrayBuffer_getLong(&inputBuffer);
+    GL_CALL_UNLOCK();
 }
 
 void glGetInteger64vEXT(GLenum pname, GLint64* data) {
@@ -2513,7 +2517,13 @@ void glGetInteger64vEXT(GLenum pname, GLint64* data) {
 }
 
 void glGetIntegeri_v(GLenum target, GLuint index, GLint* data) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLCALL, "glGetIntegeri_v");
+    uint64_t request = (uint64_t)target | ((uint64_t)index << 32);
+    GL_CALL_LOCK();
+    GL_SEND_CHECKED(REQUEST_CODE_GL_GET_INTEGERI_V, &request,
+                    sizeof(request));
+    GL_RECV_CHECKED();
+    *data = ArrayBuffer_getInt(&inputBuffer);
+    GL_CALL_UNLOCK();
 }
 
 void glGetIntegeri_vEXT(GLenum target, GLuint index, GLint* data) {
@@ -2917,7 +2927,17 @@ void glGetShaderInfoLog(GLuint shader, GLsizei bufSize, GLsizei* length, GLchar*
 }
 
 void glGetShaderPrecisionFormat(GLenum shadertype, GLenum precisiontype, GLint* range, GLint* precision) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLCALL, "glGetShaderPrecisionFormat");
+    GL_CALL_LOCK();
+    ArrayBuffer_rewind(&outputBuffer);
+    ArrayBuffer_putInt(&outputBuffer, shadertype);
+    ArrayBuffer_putInt(&outputBuffer, precisiontype);
+    GL_SEND_CHECKED(REQUEST_CODE_GL_GET_SHADER_PRECISION_FORMAT,
+                    outputBuffer.buffer, outputBuffer.size);
+    GL_RECV_CHECKED();
+    range[0] = ArrayBuffer_getInt(&inputBuffer);
+    range[1] = ArrayBuffer_getInt(&inputBuffer);
+    *precision = ArrayBuffer_getInt(&inputBuffer);
+    GL_CALL_UNLOCK();
 }
 
 void glGetShaderSource(GLuint shader, GLsizei bufSize, GLsizei* length, GLchar* source) {
@@ -7448,3 +7468,40 @@ void glWindowPos3svARB(const GLshort* v) {
     glWindowPos3sv(v);
 }
 
+void glBindTransformFeedback(GLenum target, GLuint id) {
+    uint64_t request = (uint64_t)target | ((uint64_t)id << 32);
+    GL_CALL_LOCK();
+    GL_SEND_CHECKED(REQUEST_CODE_GL_BIND_TRANSFORM_FEEDBACK,
+                    &request, sizeof(request));
+    GL_CALL_UNLOCK();
+}
+
+void glDeleteTransformFeedbacks(GLsizei count, const GLuint* ids) {
+    GL_CALL_LOCK();
+    ArrayBuffer_rewind(&outputBuffer);
+    ArrayBuffer_putInt(&outputBuffer, count);
+    for (GLsizei i = 0; i < count; i++)
+        ArrayBuffer_putInt(&outputBuffer, ids[i]);
+    GL_SEND_CHECKED(REQUEST_CODE_GL_DELETE_TRANSFORM_FEEDBACKS,
+                    outputBuffer.buffer, outputBuffer.size);
+    GL_CALL_UNLOCK();
+}
+
+void glGenTransformFeedbacks(GLsizei count, GLuint* ids) {
+    GL_CALL_LOCK();
+    GL_SEND_CHECKED(REQUEST_CODE_GL_GEN_TRANSFORM_FEEDBACKS,
+                    &count, sizeof(count));
+    GL_RECV_CHECKED();
+    memcpy(ids, inputBuffer.buffer, count * sizeof(GLuint));
+    GL_CALL_UNLOCK();
+}
+
+GLboolean glIsTransformFeedback(GLuint id) {
+    GL_CALL_LOCK();
+    GL_SEND_CHECKED(REQUEST_CODE_GL_IS_TRANSFORM_FEEDBACK,
+                    &id, sizeof(id), GL_FALSE);
+    GL_RECV_CHECKED(GL_FALSE);
+    GLboolean result = ArrayBuffer_get(&inputBuffer);
+    GL_CALL_UNLOCK();
+    return result;
+}
