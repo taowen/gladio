@@ -3239,7 +3239,15 @@ void glGetVertexAttribfvARB(GLuint index, GLenum pname, GLfloat* params) {
 }
 
 void glGetVertexAttribiv(GLuint index, GLenum pname, GLint* params) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLCALL, "glGetVertexAttribiv");
+    GL_CALL_LOCK();
+    ArrayBuffer_rewind(&outputBuffer);
+    ArrayBuffer_putInt(&outputBuffer, index);
+    ArrayBuffer_putInt(&outputBuffer, pname);
+    GL_SEND_CHECKED(REQUEST_CODE_GL_GET_VERTEX_ATTRIBIV,
+                    outputBuffer.buffer, outputBuffer.size);
+    GL_RECV_CHECKED();
+    *params = ArrayBuffer_getInt(&inputBuffer);
+    GL_CALL_UNLOCK();
 }
 
 void glGetVertexAttribivARB(GLuint index, GLenum pname, GLint* params) {
@@ -7296,7 +7304,39 @@ void glVertexAttribI4usvEXT(GLuint index, const GLushort* v) {
 }
 
 void glVertexAttribIPointer(GLuint index, GLint size, GLenum type, GLsizei stride, const void* pointer) {
-    println(MSG_DEBUG_UNIMPLEMENTED_GLCALL, "glVertexAttribIPointer");
+    GL_CALL_LOCK();
+    GLClientState* clientState = currentGLContext->clientState;
+    GLBuffer* arrayBuffer = GLBuffer_getBound(GL_ARRAY_BUFFER);
+    if (index < VERTEX_ATTRIB_COUNT) {
+        if (clientState->arbProgram[0]) index += GENERIC_VERTEX_ARRAY_INDEX;
+        if (!arrayBuffer) {
+            clientState->vao->attribs[index].stride = stride > 0
+                    ? stride : MIN(4, size) * sizeofGLType(type);
+            clientState->vao->attribs[index].pointer = pointer;
+            GLVertexArrayObject_setAttribState(clientState, index,
+                                               VERTEX_ATTRIB_ENABLED, false);
+            pointer = (void*)0;
+        }
+        else GLVertexArrayObject_setAttribState(clientState, index,
+                                                VERTEX_ATTRIB_DISABLED, true);
+    }
+
+    if (arrayBuffer && arrayBuffer->mapped) {
+        short drawStride = stride > 0 ? stride
+                : (MIN(4, size) * sizeofGLType(type) + (uint64_t)pointer);
+        arrayBuffer->drawStride = MAX(drawStride, arrayBuffer->drawStride);
+    }
+
+    ArrayBuffer_rewind(&outputBuffer);
+    ArrayBuffer_putInt(&outputBuffer, index);
+    ArrayBuffer_putInt(&outputBuffer, size);
+    ArrayBuffer_putInt(&outputBuffer, type);
+    ArrayBuffer_putInt(&outputBuffer, stride);
+    ArrayBuffer_putInt(&outputBuffer, (uint64_t)pointer);
+    gl_send(currentGLContext->serverRing,
+            REQUEST_CODE_GL_VERTEX_ATTRIB_IPOINTER,
+            outputBuffer.buffer, outputBuffer.size);
+    GL_CALL_UNLOCK();
 }
 
 void glVertexAttribIPointerEXT(GLuint index, GLint size, GLenum type, GLsizei stride, const void* pointer) {
