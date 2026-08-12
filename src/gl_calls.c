@@ -2766,6 +2766,25 @@ void glGetProgramInfoLog(GLuint program, GLsizei bufSize, GLsizei* length, GLcha
     GL_CALL_UNLOCK();
 }
 
+void glGetProgramBinary(GLuint program, GLsizei bufSize, GLsizei* length,
+                        GLenum* binaryFormat, void* binary) {
+    GL_CALL_LOCK();
+    ArrayBuffer_rewind(&outputBuffer);
+    ArrayBuffer_putInt(&outputBuffer, program);
+    ArrayBuffer_putInt(&outputBuffer, bufSize);
+    GL_SEND_CHECKED(REQUEST_CODE_GL_GET_PROGRAM_BINARY,
+                    outputBuffer.buffer, outputBuffer.size);
+    GL_RECV_CHECKED();
+    GLsizei receivedLength = ArrayBuffer_getInt(&inputBuffer);
+    GLenum receivedFormat = ArrayBuffer_getInt(&inputBuffer);
+    if (receivedLength > 0 && binary)
+        memcpy(binary, inputBuffer.buffer + inputBuffer.position,
+               receivedLength);
+    if (length) *length = receivedLength;
+    if (binaryFormat) *binaryFormat = receivedFormat;
+    GL_CALL_UNLOCK();
+}
+
 void glGetProgramLocalParameterdvARB(GLenum target, GLuint index, GLdouble* params) {
     println(MSG_DEBUG_UNIMPLEMENTED_GLCALL, "glGetProgramLocalParameterdvARB");
 }
@@ -4675,6 +4694,20 @@ void glPrioritizeTexturesEXT(GLsizei n, const GLuint* textures, const GLclampf* 
 
 void glProgramEnvParameter4dARB(GLenum target, GLuint index, GLdouble x, GLdouble y, GLdouble z, GLdouble w) {
     glProgramEnvParameter4fARB(target, index, (GLfloat)x, (GLfloat)y, (GLfloat)z, (GLfloat)w);
+}
+
+void glProgramBinary(GLuint program, GLenum binaryFormat, const void* binary,
+                     GLsizei length) {
+    GL_CALL_LOCK();
+    ArrayBuffer_rewind(&outputBuffer);
+    ArrayBuffer_putInt(&outputBuffer, program);
+    ArrayBuffer_putInt(&outputBuffer, binaryFormat);
+    ArrayBuffer_putInt(&outputBuffer, length);
+    if (length > 0)
+        ArrayBuffer_putBytes(&outputBuffer, binary, length);
+    GL_SEND_CHECKED(REQUEST_CODE_GL_PROGRAM_BINARY,
+                    outputBuffer.buffer, outputBuffer.size);
+    GL_CALL_UNLOCK();
 }
 
 void glProgramEnvParameter4dvARB(GLenum target, GLuint index, const GLdouble* params) {
