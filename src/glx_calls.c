@@ -292,8 +292,10 @@ int glXGetFBConfigAttrib(Display* dpy, GLXFBConfig config, int attribute, int* v
         }
     }
     
+    /* Qt's qglx_buildSpec always sends GLX_LEVEL 0. A missing property
+     * must not reject the config the way a hard BAD_ATTRIBUTE would. */
     *value = 0;
-    return 1;
+    return 0;
 }
 
 GLXFBConfig* glXGetFBConfigs(Display* dpy, int screen, int* nelements) {
