@@ -86,17 +86,21 @@ GLXContext glXCreateContextAttribsARB(Display* dpy, GLXFBConfig config, GLXConte
     
     int i = 0;
     int num_attribs = 0;
-    while (attrib_list[i]) {
-        num_attribs++;
-        i += 2;
+    if (attrib_list) {
+        while (attrib_list[i]) {
+            num_attribs++;
+            i += 2;
+        }
     }
     ArrayBuffer_putInt(&requestData, num_attribs);
-    
+
     i = 0;
-    while (attrib_list[i]) {
-        ArrayBuffer_putInt(&requestData, attrib_list[i+0]);
-        ArrayBuffer_putInt(&requestData, attrib_list[i+1]);
-        i += 2;
+    if (attrib_list) {
+        while (attrib_list[i]) {
+            ArrayBuffer_putInt(&requestData, attrib_list[i+0]);
+            ArrayBuffer_putInt(&requestData, attrib_list[i+1]);
+            i += 2;
+        }
     }
     
     if (!glx_send(serverFd, GLX_OPCODE_CREATE_CONTEXT_ATTRIBS_ARB, requestData.buffer, requestData.size)) {
@@ -179,6 +183,10 @@ GLXWindow glXCreateWindow(Display* dpy, GLXFBConfig config, Window win, const in
 }
 
 void glXDestroyContext(Display* dpy, GLXContext ctx) {
+    /* GLX 1.3: a NULL ctx is a no-op. Qt xcb-glx / Krita destroy unused
+     * QGLXContext wrappers this way. */
+    if (!ctx) return;
+    (void)dpy;
     GLX_CALL_LOCK();
     glx_send(serverFd, GLX_OPCODE_DESTROY_CONTEXT, &ctx->id, sizeof(int));
 
