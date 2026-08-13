@@ -12,7 +12,47 @@ static int maxContextId = 1;
 #define GLX_CALL_UNLOCK() pthread_mutex_unlock(&gl_call_mutex)
 
 GLXFBConfig* glXChooseFBConfig(Display* dpy, int screen, const int* attrib_list, int* nelements) {
-    return glXGetFBConfigs(dpy, screen, nelements);
+    int available = 0;
+    GLXFBConfig* all = glXGetFBConfigs(dpy, screen, &available);
+    if (!all || available <= 0) {
+        if (nelements) *nelements = 0;
+        return all;
+    }
+    if (!attrib_list) {
+        if (nelements) *nelements = available;
+        return all;
+    }
+    GLXFBConfig* matched = malloc((size_t)available * sizeof(GLXFBConfig));
+    int count = 0;
+    for (int i = 0; i < available; i++) {
+        int ok = 1;
+        for (int a = 0; attrib_list[a] != 0 && attrib_list[a] != None; a += 2) {
+            int value = 0;
+            if (glXGetFBConfigAttrib(dpy, all[i], attrib_list[a], &value) != 0) {
+                ok = 0;
+                break;
+            }
+            if (value != attrib_list[a + 1]
+                    && !(attrib_list[a] == GLX_RED_SIZE && value >= attrib_list[a + 1])
+                    && !(attrib_list[a] == GLX_GREEN_SIZE && value >= attrib_list[a + 1])
+                    && !(attrib_list[a] == GLX_BLUE_SIZE && value >= attrib_list[a + 1])
+                    && !(attrib_list[a] == GLX_ALPHA_SIZE && value >= attrib_list[a + 1])
+                    && !(attrib_list[a] == GLX_DEPTH_SIZE && value >= attrib_list[a + 1])
+                    && !(attrib_list[a] == GLX_STENCIL_SIZE && value >= attrib_list[a + 1])
+                    && !(attrib_list[a] == GLX_DRAWABLE_TYPE && (value & attrib_list[a + 1]) == attrib_list[a + 1])) {
+                ok = 0;
+                break;
+            }
+        }
+        if (ok) matched[count++] = all[i];
+    }
+    free(all);
+    if (nelements) *nelements = count;
+    if (count == 0) {
+        free(matched);
+        return NULL;
+    }
+    return matched;
 }
 
 XVisualInfo* glXChooseVisual(Display* dpy, int screen, int* attribList) {
