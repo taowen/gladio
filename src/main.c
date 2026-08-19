@@ -205,9 +205,14 @@ bool gladioInitOnce(Display* dpy) {
         int majorOpcode;
         int firstEvent;
         int firstError;
-        if (!XQueryExtension(dpy, "GLX", &majorOpcode, &firstEvent,
-                             &firstError)) return false;
-        glxMajorOpcode = (char)majorOpcode;
+        if (XQueryExtension(dpy, "GLX", &majorOpcode, &firstEvent,
+                            &firstError))
+            glxMajorOpcode = (char)majorOpcode;
+        else if (getenv("GLADIO_X11_SOCKET") && getenv("GLADIO_X11_SOCKET")[0])
+            /* Xwayland -shm has no GLX; the sidecar is the implementation. */
+            glxMajorOpcode = 1;
+        else
+            return false;
     }
     if (serverFd == -1) {
         serverFd = gladioServerConnect();
