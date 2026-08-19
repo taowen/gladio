@@ -205,11 +205,11 @@ bool gladioInitOnce(Display* dpy) {
         int majorOpcode;
         int firstEvent;
         int firstError;
-        if (XQueryExtension(dpy, "GLX", &majorOpcode, &firstEvent,
+        if (dpy && XQueryExtension(dpy, "GLX", &majorOpcode, &firstEvent,
                             &firstError))
             glxMajorOpcode = (char)majorOpcode;
         else if (getenv("GLADIO_X11_SOCKET") && getenv("GLADIO_X11_SOCKET")[0])
-            /* Xwayland -shm has no GLX; the sidecar is the implementation. */
+            /* Xwayland -shm has no GLX; Wayland EGL also uses the sidecar. */
             glxMajorOpcode = 1;
         else
             return false;

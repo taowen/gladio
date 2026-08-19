@@ -11,6 +11,10 @@ static int maxContextId = 1;
 #define GLX_CALL_LOCK() pthread_mutex_lock(&gl_call_mutex)
 #define GLX_CALL_UNLOCK() pthread_mutex_unlock(&gl_call_mutex)
 
+int glXSwapIntervalSGI(int interval);
+int glXSwapIntervalMESA(unsigned int interval);
+void glXSwapIntervalEXT(Display *dpy, GLXDrawable drawable, int interval);
+
 GLXFBConfig* glXChooseFBConfig(Display* dpy, int screen, const int* attrib_list, int* nelements) {
     int available = 0;
     GLXFBConfig* all = glXGetFBConfigs(dpy, screen, &available);
@@ -381,6 +385,9 @@ __GLXextFuncPtr glXGetProcAddressARB(const GLubyte* procName) {
     else if (strcmp(name, "glXQueryVersion") == 0) return (__GLXextFuncPtr)glXQueryVersion;
     else if (strcmp(name, "glXSelectEvent") == 0) return (__GLXextFuncPtr)glXSelectEvent;
     else if (strcmp(name, "glXSwapBuffers") == 0) return (__GLXextFuncPtr)glXSwapBuffers;
+    else if (strcmp(name, "glXSwapIntervalSGI") == 0) return (__GLXextFuncPtr)glXSwapIntervalSGI;
+    else if (strcmp(name, "glXSwapIntervalMESA") == 0) return (__GLXextFuncPtr)glXSwapIntervalMESA;
+    else if (strcmp(name, "glXSwapIntervalEXT") == 0) return (__GLXextFuncPtr)glXSwapIntervalEXT;
     else if (strcmp(name, "glXUseXFont") == 0) return (__GLXextFuncPtr)glXUseXFont;
     else if (strcmp(name, "glXWaitGL") == 0) return (__GLXextFuncPtr)glXWaitGL;
     else if (strcmp(name, "glXWaitX") == 0) return (__GLXextFuncPtr)glXWaitX;
@@ -573,6 +580,22 @@ Bool glXQueryVersion(Display* dpy, int* maj, int* min) {
 
 void glXSelectEvent(Display* dpy, GLXDrawable draw, unsigned long event_mask) {
     println(MSG_DEBUG_UNIMPLEMENTED_GLXCALL, "glXSelectEvent");
+}
+
+int glXSwapIntervalSGI(int interval) {
+    (void)interval;
+    return 0;
+}
+
+int glXSwapIntervalMESA(unsigned int interval) {
+    (void)interval;
+    return 0;
+}
+
+void glXSwapIntervalEXT(Display *dpy, GLXDrawable drawable, int interval) {
+    (void)dpy;
+    (void)drawable;
+    (void)interval;
 }
 
 void glXSwapBuffers(Display* dpy, GLXDrawable drawable) {
