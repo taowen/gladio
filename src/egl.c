@@ -241,6 +241,7 @@ EGLContext eglCreateContext(EGLDisplay dpy, EGLConfig config,
     ArrayBuffer_putInt(&requestData, 0);
     ArrayBuffer_putInt(&requestData, share ? share->id : 0);
     ArrayBuffer_put(&requestData, 1);
+    ArrayBuffer_putBytes(&requestData, NULL, 3);
     if (!glx_send(serverFd, GLX_OPCODE_CREATE_CONTEXT, requestData.buffer,
                   requestData.size) ||
             !glx_recv(serverFd, &replyData)) {

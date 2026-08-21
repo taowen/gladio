@@ -154,30 +154,34 @@ error:
 }
 
 static int gladioServerConnect() {
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (fd < 0) return -1;
-
-    struct sockaddr_un server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sun_family = AF_LOCAL;
-
     const char* socketPath = getenv("GLADIO_X11_SOCKET");
+    int attempt;
+
     if (!socketPath || !socketPath[0]) socketPath = X11_SERVER_PATH;
-    strncpy(server_addr.sun_path, socketPath, sizeof(server_addr.sun_path) - 1);
+    for (attempt = 0; attempt < 50; attempt++) {
+        int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        struct sockaddr_un server_addr;
+        int res;
 
-    int res;
-    do {
+        if (fd < 0) return -1;
+        memset(&server_addr, 0, sizeof(server_addr));
+        server_addr.sun_family = AF_LOCAL;
+        strncpy(server_addr.sun_path, socketPath, sizeof(server_addr.sun_path) - 1);
         res = 0;
-        if (connect(fd, (struct sockaddr*)&server_addr, sizeof(struct sockaddr_un)) < 0) res = -errno;
-    } 
-    while (res == -EINTR);    
-
-    if (res < 0) {
+        if (connect(fd, (struct sockaddr*)&server_addr, sizeof(struct sockaddr_un)) < 0)
+            res = -errno;
+        if (res == -EINTR) {
+            close(fd);
+            continue;
+        }
+        if (res == 0)
+            return fd;
         close(fd);
-        return -1;
+        if (res != -ECONNREFUSED && res != -ENOENT)
+            return -1;
+        usleep(20000);
     }
-
-    return fd;
+    return -1;
 }
 
 static bool sendX11AuthRequest() {
@@ -205,12 +209,14 @@ bool gladioInitOnce(Display* dpy) {
         int majorOpcode;
         int firstEvent;
         int firstError;
-        if (dpy && XQueryExtension(dpy, "GLX", &majorOpcode, &firstEvent,
+        /* Sidecar first. Xwayland's GLX stub advertises the extension but
+         * CreateContext is a no-op without a reply; using its major opcode
+         * desyncs Gladio's private socket protocol. */
+        if (getenv("GLADIO_X11_SOCKET") && getenv("GLADIO_X11_SOCKET")[0])
+            glxMajorOpcode = 1;
+        else if (dpy && XQueryExtension(dpy, "GLX", &majorOpcode, &firstEvent,
                             &firstError))
             glxMajorOpcode = (char)majorOpcode;
-        else if (getenv("GLADIO_X11_SOCKET") && getenv("GLADIO_X11_SOCKET")[0])
-            /* Xwayland -shm has no GLX; Wayland EGL also uses the sidecar. */
-            glxMajorOpcode = 1;
         else
             return false;
     }

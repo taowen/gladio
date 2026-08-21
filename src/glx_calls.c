@@ -134,6 +134,7 @@ GLXContext glXCreateContext(Display* dpy, XVisualInfo* vis, GLXContext shareList
     ArrayBuffer_putInt(&requestData, 0);
     ArrayBuffer_putInt(&requestData, shareList ? shareList->id : 0);
     ArrayBuffer_put(&requestData, direct);
+    ArrayBuffer_putBytes(&requestData, NULL, 3);
 
     if (!glx_send(serverFd, GLX_OPCODE_CREATE_CONTEXT, requestData.buffer, requestData.size)) {
         GLX_CALL_UNLOCK();
