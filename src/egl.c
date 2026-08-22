@@ -4,6 +4,7 @@
 
 #include <EGL/egl.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 /*
@@ -18,9 +19,10 @@ struct gladio_wl_egl_window {
 };
 
 struct GladioEGLSurface {
-    struct gladio_wl_egl_window *win;
+    struct gladio_wl_egl_window *win; /* NULL for pbuffer */
     int width;
     int height;
+    int is_pbuffer;
 };
 
 #define GLADIO_EGL_DISPLAY ((EGLDisplay)(intptr_t)0x474c4144)
@@ -44,11 +46,13 @@ static int egl_set_window(GLXContext ctx, struct GladioEGLSurface *surf)
     int w = 0;
     int h = 0;
 
-    if (!ctx || !surf || !surf->win) {
+    if (!ctx || !surf) {
         return 0;
     }
-    w = surf->win->width;
-    h = surf->win->height;
+    if (surf->win) {
+        w = surf->win->width;
+        h = surf->win->height;
+    }
     if (w <= 0) {
         w = surf->width;
     }
@@ -201,7 +205,10 @@ EGLBoolean eglGetConfigAttrib(EGLDisplay dpy, EGLConfig config, EGLint attribute
         *value = 8;
         break;
     case EGL_SURFACE_TYPE:
-        *value = EGL_WINDOW_BIT;
+        *value = EGL_WINDOW_BIT | EGL_PBUFFER_BIT;
+        break;
+    case EGL_CONFIG_ID:
+        *value = 1;
         break;
     case EGL_RENDERABLE_TYPE:
         *value = EGL_OPENGL_ES2_BIT | EGL_OPENGL_BIT;
@@ -288,6 +295,44 @@ EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig config,
     surf->win = win;
     surf->width = win->width > 0 ? win->width : 1;
     surf->height = win->height > 0 ? win->height : 1;
+    surf->is_pbuffer = 0;
+    return (EGLSurface)surf;
+}
+
+EGLSurface eglCreatePbufferSurface(EGLDisplay dpy, EGLConfig config,
+                                   const EGLint *attrib_list)
+{
+    struct GladioEGLSurface *surf;
+    int width = 1;
+    int height = 1;
+
+    (void)config;
+    if (dpy != GLADIO_EGL_DISPLAY) {
+        egl_fail(EGL_BAD_DISPLAY);
+        return EGL_NO_SURFACE;
+    }
+    if (attrib_list) {
+        for (int i = 0; attrib_list[i] != EGL_NONE; i += 2) {
+            if (attrib_list[i] == EGL_WIDTH) {
+                width = attrib_list[i + 1];
+            } else if (attrib_list[i] == EGL_HEIGHT) {
+                height = attrib_list[i + 1];
+            }
+        }
+    }
+    if (width <= 0 || height <= 0) {
+        egl_fail(EGL_BAD_PARAMETER);
+        return EGL_NO_SURFACE;
+    }
+    surf = calloc(1, sizeof(*surf));
+    if (!surf) {
+        egl_fail(EGL_BAD_ALLOC);
+        return EGL_NO_SURFACE;
+    }
+    surf->win = NULL;
+    surf->width = width;
+    surf->height = height;
+    surf->is_pbuffer = 1;
     return (EGLSurface)surf;
 }
 
@@ -392,7 +437,39 @@ EGLBoolean eglQuerySurface(EGLDisplay dpy, EGLSurface surface, EGLint attribute,
         *value = surf->height;
         return EGL_TRUE;
     }
+    if (attribute == EGL_RENDER_BUFFER) {
+        *value = EGL_BACK_BUFFER;
+        return EGL_TRUE;
+    }
     *value = 0;
+    return EGL_TRUE;
+}
+
+EGLBoolean eglQueryContext(EGLDisplay dpy, EGLContext ctx, EGLint attribute,
+                           EGLint *value)
+{
+    (void)dpy;
+    if (!ctx || !value) {
+        egl_fail(EGL_BAD_PARAMETER);
+        return EGL_FALSE;
+    }
+    switch (attribute) {
+    case EGL_CONFIG_ID:
+        *value = 1;
+        break;
+    case EGL_CONTEXT_CLIENT_TYPE:
+        *value = EGL_OPENGL_ES_API;
+        break;
+    case EGL_CONTEXT_CLIENT_VERSION:
+        *value = 2;
+        break;
+    case EGL_RENDER_BUFFER:
+        *value = g_egl_current_ctx == ctx ? EGL_BACK_BUFFER : EGL_NONE;
+        break;
+    default:
+        egl_fail(EGL_BAD_ATTRIBUTE);
+        return EGL_FALSE;
+    }
     return EGL_TRUE;
 }
 
@@ -457,6 +534,9 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char *procname)
     if (strcmp(procname, "eglCreateWindowSurface") == 0) {
         return (__eglMustCastToProperFunctionPointerType)eglCreateWindowSurface;
     }
+    if (strcmp(procname, "eglCreatePbufferSurface") == 0) {
+        return (__eglMustCastToProperFunctionPointerType)eglCreatePbufferSurface;
+    }
     if (strcmp(procname, "eglMakeCurrent") == 0) {
         return (__eglMustCastToProperFunctionPointerType)eglMakeCurrent;
     }
@@ -465,6 +545,9 @@ __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char *procname)
     }
     if (strcmp(procname, "eglSwapInterval") == 0) {
         return (__eglMustCastToProperFunctionPointerType)eglSwapInterval;
+    }
+    if (strcmp(procname, "eglQueryContext") == 0) {
+        return (__eglMustCastToProperFunctionPointerType)eglQueryContext;
     }
     if (strcmp(procname, "eglGetProcAddress") == 0) {
         return (__eglMustCastToProperFunctionPointerType)eglGetProcAddress;

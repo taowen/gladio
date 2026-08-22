@@ -56,6 +56,9 @@ typedef void (*__eglMustCastToProperFunctionPointerType)(void);
 #define EGL_HEIGHT 0x3056
 #define EGL_WIDTH 0x3057
 #define EGL_CLIENT_APIS 0x308D
+#define EGL_RENDER_BUFFER 0x3086
+#define EGL_BACK_BUFFER 0x3084
+#define EGL_CONTEXT_CLIENT_TYPE 0x3097
 #define EGL_CONTEXT_CLIENT_VERSION 0x3098
 
 #define EGL_PBUFFER_BIT 0x0001
@@ -86,12 +89,16 @@ EGLBoolean eglDestroyContext(EGLDisplay dpy, EGLContext ctx);
 EGLSurface eglCreateWindowSurface(EGLDisplay dpy, EGLConfig config,
                                   EGLNativeWindowType native_window,
                                   const EGLint *attrib_list);
+EGLSurface eglCreatePbufferSurface(EGLDisplay dpy, EGLConfig config,
+                                   const EGLint *attrib_list);
 EGLBoolean eglDestroySurface(EGLDisplay dpy, EGLSurface surface);
 EGLBoolean eglMakeCurrent(EGLDisplay dpy, EGLSurface draw, EGLSurface read,
                           EGLContext ctx);
 EGLBoolean eglSwapBuffers(EGLDisplay dpy, EGLSurface surface);
 EGLBoolean eglSwapInterval(EGLDisplay dpy, EGLint interval);
 EGLBoolean eglQuerySurface(EGLDisplay dpy, EGLSurface surface, EGLint attribute,
+                           EGLint *value);
+EGLBoolean eglQueryContext(EGLDisplay dpy, EGLContext ctx, EGLint attribute,
                            EGLint *value);
 EGLint eglGetError(void);
 EGLContext eglGetCurrentContext(void);
